@@ -1,5 +1,5 @@
 import numpy as np
-#import math as m
+import math as m
 
 def compute_ray_dir(x, y, world):
     # Maybe use something like lookAt here
@@ -19,12 +19,13 @@ def refract(I, N, n1, n2):
     n1 -- index of refraction of original medium
     n2 -- index of refraction of new medium
     """
-    return I
-    #c1 = -N.dot(I)
-    #n = n1 / n2
-    #c2 = m.sqrt(1 - pow(n, 2) * (1 - pow(c1, 2)))
-
-    #return (n * I) + (n * c1 - c2) * N
+    n = n1/n2
+    cosI = -N.dot(I)
+    sinT2 = n * n * (1 - cosI * cosI)
+    if sinT2 > 1:
+        return None
+    cosT = m.sqrt(1 - sinT2)
+    return n * I + (n * cosI - cosT) * N
 
 def normalize(x):
     return x/np.sqrt(x.dot(x))

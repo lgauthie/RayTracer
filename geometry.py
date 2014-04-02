@@ -10,10 +10,12 @@ class Material(object):
     Class to hold information about the material
     """
     def __init__(self, color, trans, refl, shin,
-                 spec=np.array([1,1,1]), diff=np.array([0.6,0.6,0.6])):
+                 spec=np.array([1,1,1]), diff=np.array([0.6,0.6,0.6]),
+                 ref_index=1):
         self.color = color
         self.transparency = trans
         self.reflectivity = refl
+        self.ref_index = ref_index
         self.shininess = shin
         self.specular = spec
         self.diffuse = diff
@@ -48,7 +50,7 @@ class Sphere(object):
         if (tca < 0):
             return (False, sys.maxint)
 
-        d2 = l.dot(l) - tca * tca;
+        d2 = l.dot(l) - tca * tca
         if (d2 > self.radius2):
             return (False, sys.maxint)
 
@@ -60,6 +62,7 @@ class Sphere(object):
             t = t0
         elif t1 > 0:
             t = t1
+
         return (True, t)
 
     def get_normal(self, point):

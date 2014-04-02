@@ -7,6 +7,7 @@ import numpy as np
 
 from multiprocessing import Pool
 from functools import partial
+from random import uniform
 
 from geometry import Sphere
 from geometry import Material
@@ -25,7 +26,7 @@ class World(object):
         self.aspectratio = self.width/float(self.height)
         self.angle = m.tan(m.pi * 0.5 * self.fov / 180.);
         self.entities = entities
-        self.max_depth = 6
+        self.max_depth = 5
         self.lights = lights
         self.multisample = ms
 
@@ -33,21 +34,21 @@ class World(object):
 def create_world(width, height):
     # TODO: Read this data in from file
     entities = [
-        Sphere(np.array([0., -10003., -20.]),
+        Sphere(np.array([0., -10003., -30.]),
                10000, Material(color=np.array([0.2, 0.5, 0.3]),
                                trans=0, refl=0.1, shin=1)),
-        Sphere(np.array([0., 0., -20.]),
+        Sphere(np.array([0., 0., -30.]),
                4, Material(color=np.array([1.00, 0.32, 0.36]),
                            trans=0, refl=0.5, shin=16)),
-        Sphere(np.array([5., -1., -15.]),
+        Sphere(np.array([5., -1., -25.]),
                4, Material(color=np.array([0.90, 0.76, 0.46]),
                            trans=0, refl=0.6, shin=32)),
-        Sphere(np.array([5., 0., -25.]),
+        Sphere(np.array([5., 2., -35.]),
                4, Material(color=np.array([0.65, 0.77, 0.97]),
                            trans=0, refl=0.2, shin=6)),
-        Sphere(np.array([-5.5, 0., -15.]),
+        Sphere(np.array([-4.5, 0., -25.]),
                4, Material(color=np.array([0.50, 0.50, 0.50]),
-                           trans=0.9, refl=0.2, shin=1)),
+                           trans=0.8, refl=0.2, shin=1, ref_index=1.00332)),
         Plane(np.array([-0.6, 0., 0.]), 3,
                Material(color=np.array([0.90, 0.20, 0.50]),
                         trans=0, refl=0.07, shin=6)),
@@ -55,11 +56,11 @@ def create_world(width, height):
     lights = [
         np.array([-16.001, 5.001, 15.001])
     ]
-    return World(width, height, 70., entities, lights, ms=3)
+    return World(width, height, 45., entities, lights, ms=3)
 
 def main():
-    width = 640/2
-    height = 480/2
+    width = 640/3
+    height = 480/3
 
     world = create_world(width, height)
 
@@ -89,15 +90,17 @@ def compute_initial_ray(world, tup):
     color = np.array([0, 0, 0])
 
     ms = world.multisample
-    ms_range = xrange(-(ms/2), ms/2 + 1)
-    for i in ms_range:
-        for j in ms_range:
-            ray_dir = compute_ray_dir(x + i/float(ms), y + j/float(ms), world)
+ #[[(x - ((n-1)/2.),y - ((n-1)/2.)) for y in range(0,n)] for x in range(0,n)]
+    for xx in range(0,ms):
+        for yy in range(0,ms):
+            ray_dir = compute_ray_dir(x + (xx - ((ms-1)/2.))/float(ms),
+                                      y + (yy - ((ms-1)/2.))/float(ms),
+                                      world)
             color = color + trace(world, ray_dir)
 
-    return np.clip((color/float(ms ** 2)) * 255, 0, 255)
+    return np.clip((color/float(ms * ms)) * 255, 0, 255)
 
-def trace(world, ray_dir, ray_origin=np.array([0,0,0]), depth=0):
+def trace(world, ray_dir, ray_origin=np.array([0,0,0]), depth=0, cur_ref_index=1):
     color = np.array([0,0,0]) # Default Color to black
 
     # Find nearest object
@@ -124,8 +127,10 @@ def trace(world, ray_dir, ray_origin=np.array([0,0,0]), depth=0):
         for entity in world.entities:
             (is_intersected, dist) = entity.intersected(light_dir, inter1)
             if is_intersected:
-                color = nearest_entity.material.ambient \
-                      * nearest_entity.material.color
+                #color = nearest_entity.material.ambient \
+                #      * nearest_entity.material.color
+                color = compute_light(nearest_entity, ray_dir, normal, normalize(light)) \
+                      * max((entity.material.transparency), 0.3)
                 break
         else:
             color = compute_light(nearest_entity, ray_dir, normal, normalize(light))
@@ -136,12 +141,17 @@ def trace(world, ray_dir, ray_origin=np.array([0,0,0]), depth=0):
     trans = nearest_entity.material.transparency
     if depth <= world.max_depth:
         if refl > 0.05:
-            refl_color = trace(world, reflect(ray_dir, normal), inter1, depth+1)
+            refl_color = trace(world, reflect(ray_dir, normal), inter1, depth+1, cur_ref_index=cur_ref_index)
             color += nearest_entity.material.reflectivity * refl_color
         if trans > 0.05:
-            refract_dir = refract(ray_dir, normal, 1.49, 1.3)
-            trans_color = trace(world, refract_dir, intersect + (ray_dir*0.1), depth+1)
-            color += nearest_entity.material.transparency * trans_color
+            if nearest_entity.material.ref_index == cur_ref_index:
+                new_ref_index = 1
+            else:
+                new_ref_index = nearest_entity.material.ref_index
+            refract_dir = refract(ray_dir, normal, cur_ref_index, new_ref_index)
+            if refract_dir != None:
+                trans_color = trace(world, refract_dir, intersect + (ray_dir*0.1), depth+1, cur_ref_index=new_ref_index)
+                color += nearest_entity.material.transparency * trans_color
 
     return color
 
