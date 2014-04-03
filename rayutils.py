@@ -28,4 +28,7 @@ def refract(I, N, n1, n2):
     return n * I + (n * cosI - cosT) * N
 
 def normalize(x):
-    return x/np.sqrt(x.dot(x))
+    return x/mag(x)
+
+def mag(x):
+    return np.sqrt(x.dot(x))

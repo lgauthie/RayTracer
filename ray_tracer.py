@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import png
+import argparse
 
 import math as m
 import numpy as np
@@ -16,10 +17,11 @@ from rayutils import normalize
 from rayutils import reflect
 from rayutils import refract
 from rayutils import compute_ray_dir
+from rayutils import mag
 
 
 class World(object):
-    def __init__(self, width, height, fov, entities, lights, ms):
+    def __init__(self, width, height, fov, entities, lights, ms, randsample=False):
         self.width = width
         self.height = height
         self.fov = float(fov)
@@ -29,10 +31,10 @@ class World(object):
         self.max_depth = 5
         self.lights = lights
         self.multisample = ms
+        self.randsample = randsample
 
 
-def create_world(width, height):
-    # TODO: Read this data in from file
+def create_world1(width, height):
     entities = [
         Sphere(np.array([0., -10003., -30.]),
                10000, Material(color=np.array([0.2, 0.5, 0.3]),
@@ -56,13 +58,94 @@ def create_world(width, height):
     lights = [
         np.array([-16.001, 5.001, 15.001])
     ]
-    return World(width, height, 45., entities, lights, ms=3)
+    return World(width, height, 45., entities, lights, ms=1)
+
+def create_world2(width, height):
+    entities = [
+        Sphere(np.array([-2.5, 4., -25.]),
+               2, Material(color=np.array([1.00, 0.20, 0.30]),
+                           trans=0.1, refl=0.4, shin=1, ref_index=1.5)),
+        Sphere(np.array([-2.5, 2., -25.]),
+               2, Material(color=np.array([1.00, 0.20, 0.60]),
+                           trans=0.1, refl=0.4, shin=1, ref_index=1.5)),
+        Sphere(np.array([-4.5, 0., -25.]),
+               2, Material(color=np.array([1.00, 0.20, 0.70]),
+                           trans=0.2, refl=0.4, shin=1, ref_index=1.0)),
+        Sphere(np.array([-3.5, -1., -20.]),
+               4, Material(color=np.array([0.00, 0.70, 0.00]),
+                           trans=0.95, refl=0.2, shin=1, ref_index=1.332)),
+        Plane(np.array([-1.0, 0.0, 0.1]), 5,
+               Material(color=np.array([0.00, 0.00, 0.70]),
+                        trans=0, refl=0.1, shin=6)),
+    ]
+    lights = [
+        np.array([-10.001, 5.001, 5.001])
+    ]
+    return World(width, height, 45., entities, lights, ms=1)
+
+def create_world3(width, height):
+    entities = [
+        Sphere(np.array([-2.5, 4., -25.]),
+               2, Material(color=np.array([0.00, 0.00, 1.00]),
+                           trans=0.1, refl=0.7, shin=16, ref_index=1.5)),
+        Sphere(np.array([-6.5, 6., -25.]),
+               2, Material(color=np.array([0.00, 1.00, 0.00]),
+                           trans=0.1, refl=0.7, shin=14, ref_index=1.5)),
+        Sphere(np.array([0.5, 0., -25.]),
+               2, Material(color=np.array([1.00, 0.00, 0.00]),
+                           trans=0.2, refl=0.7, shin=1, ref_index=1.0)),
+        Sphere(np.array([-6.5, -4., -25.]),
+               2, Material(color=np.array([0.00, 0.00, 1.00]),
+                           trans=0.1, refl=0.7, shin=16, ref_index=1.5)),
+        Sphere(np.array([-2.5, -6., -25.]),
+               2, Material(color=np.array([0.00, 1.00, 0.00]),
+                           trans=0.1, refl=0.7, shin=14, ref_index=1.5)),
+        Sphere(np.array([-8.5, 0., -25.]),
+               2, Material(color=np.array([1.00, 0.00, 0.00]),
+                           trans=0.2, refl=0.7, shin=1, ref_index=1.0)),
+        Plane(np.array([-2.0, 0.0, 0.1]), 5,
+               Material(color=np.array([0.60, 0.60, 0.60]),
+                        trans=0, refl=1.0, shin=6)),
+    ]
+    lights = [
+        np.array([-15.001, 5.001, 5.001])
+    ]
+    return World(width, height, 75., entities, lights, ms=1)
 
 def main():
     width = 640/3
     height = 480/3
 
-    world = create_world(width, height)
+    p = argparse.ArgumentParser(description="parse some things.")
+    p.add_argument("--height")
+    p.add_argument("--width")
+    p.add_argument("--world")
+    p.add_argument("--ms")
+    p.add_argument("--depth")
+    p.add_argument("--rsample")
+    opts = vars(p.parse_args())
+
+    if opts["height"]:
+        height = int(opts["height"])
+    if opts["width"]:
+        width = int(opts["width"])
+
+    world = create_world1(width, height)
+    if opts["world"] == "1":
+        world = create_world1(width, height)
+    elif opts["world"] == "2":
+        world = create_world2(width, height)
+    elif opts["world"] == "3":
+        world = create_world3(width, height)
+
+    if opts["ms"]:
+        world.multisample = int(opts["ms"])
+
+    if opts["depth"]:
+        world.max_depth = int(opts["depth"])
+
+    if opts["rsample"]:
+        world.randsample = True
 
     empty_image = [[(x, y) for y in range(width)] for x in range(height)]
 
@@ -90,15 +173,21 @@ def compute_initial_ray(world, tup):
     color = np.array([0, 0, 0])
 
     ms = world.multisample
- #[[(x - ((n-1)/2.),y - ((n-1)/2.)) for y in range(0,n)] for x in range(0,n)]
-    for xx in range(0,ms):
-        for yy in range(0,ms):
-            ray_dir = compute_ray_dir(x + (xx - ((ms-1)/2.))/float(ms),
-                                      y + (yy - ((ms-1)/2.))/float(ms),
+    if world.randsample:
+        for _ in range(ms):
+            ray_dir = compute_ray_dir(x + uniform(-0.5, 0.5),
+                                      y + uniform(-0.5, 0.5),
                                       world)
             color = color + trace(world, ray_dir)
-
-    return np.clip((color/float(ms * ms)) * 255, 0, 255)
+        return np.clip((color/float(ms)) * 255, 0, 255)
+    else:
+        for xx in range(ms):
+            for yy in range(ms):
+                ray_dir = compute_ray_dir(x + (xx - ((ms-1)/2.))/float(ms),
+                                          y + (yy - ((ms-1)/2.))/float(ms),
+                                          world)
+                color = color + trace(world, ray_dir)
+        return np.clip((color/float(ms * ms)) * 255, 0, 255)
 
 def trace(world, ray_dir, ray_origin=np.array([0,0,0]), depth=0, cur_ref_index=1):
     color = np.array([0,0,0]) # Default Color to black
@@ -117,6 +206,7 @@ def trace(world, ray_dir, ray_origin=np.array([0,0,0]), depth=0, cur_ref_index=1
     # Do Lighting!
     for light in world.lights:
         light_dir = normalize(light - intersect)
+        light_dist = mag(light - intersect)
 
         # Move the intersect point slightly towards to lightsoure to avoid
         # detecting collision with our current surface.
@@ -129,11 +219,11 @@ def trace(world, ray_dir, ray_origin=np.array([0,0,0]), depth=0, cur_ref_index=1
             if is_intersected:
                 #color = nearest_entity.material.ambient \
                 #      * nearest_entity.material.color
-                color = compute_light(nearest_entity, ray_dir, normal, normalize(light)) \
+                color = compute_light(nearest_entity, ray_dir, normal, normalize(light), light_dist) \
                       * max((entity.material.transparency), 0.3)
                 break
         else:
-            color = compute_light(nearest_entity, ray_dir, normal, normalize(light))
+            color = compute_light(nearest_entity, ray_dir, normal, normalize(light), light_dist)
 
     # If we havent hit max recursion depth, or current material is reflective,
     # trace more rays!
@@ -166,11 +256,12 @@ def find_nearest(world, ray_dir, ray_origin):
             nearest_dist = dist
     return (nearest_entity, nearest_dist)
 
-def compute_light(entity, ray_dir, normal, light_dir):
+def compute_light(entity, ray_dir, normal, light_dir, dist):
     reflect_dir = reflect(light_dir, normal)
 
     lambertian = max(light_dir.dot(normal), 0.0);
     specular = 0.0
+    falloff = 2.0
 
     if lambertian > 0.0:
         spec_angle = reflect_dir.dot(ray_dir)
@@ -181,8 +272,9 @@ def compute_light(entity, ray_dir, normal, light_dir):
     diffuse_reflection = lambertian * entity.material.diffuse
 
     m_color = entity.material.color * (1 - entity.material.transparency)
-    return specular_reflection * m_color \
-         + diffuse_reflection * m_color \
+    falloff_amount = (pow(dist, -falloff) if dist != 0 else 1) * 1000
+    return specular_reflection * m_color * falloff_amount \
+         + diffuse_reflection * m_color * falloff_amount \
          + entity.material.ambient * m_color
 
 if __name__=="__main__":
